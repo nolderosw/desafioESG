@@ -5,63 +5,16 @@
     </v-row>
     <v-row class="mt-10">
       <v-col cols="12" sm="12" xs="12" md="4" lg="4" xl="4">
-        <v-card class="mb-4" outlined align="center" justify="center">
-          <v-list-item>
-            <v-list-item-content>
-              <h3>Period</h3>
-              <v-menu
-                v-model="menu"
-                :close-on-content-click="false"
-                transition="scale-transition"
-                offset-y
-                max-width="290px"
-                min-width="290px"
-              >
-                <template v-slot:activator="{ on, attrs }">
-                  <v-text-field
-                    v-model="computedDateFormatted"
-                    label="Start Period"
-                    hint="MM/DD/YYYY format"
-                    persistent-hint
-                    prepend-icon="mdi-calendar"
-                    readonly
-                    v-bind="attrs"
-                    v-on="on"
-                  ></v-text-field>
-                </template>
-                <v-date-picker
-                  v-model="date"
-                  no-title
-                  @input="menu = false"
-                ></v-date-picker>
-              </v-menu>
-              <v-select
-                prepend-icon="mdi-calendar-clock"
-                :items="items"
-                label="Period Format"
-              ></v-select>
-            </v-list-item-content>
-          </v-list-item>
-        </v-card>
-        <v-card outlined align="center" justify="center">
-          <v-list-item>
-            <v-list-item-content>
-              <h3>Metrics</h3>
-              <br>
-              <span>Average: </span>
-              <br>
-              <span>Standard Deviation: </span>
-              <br>
-              <span>Median: </span>
-            </v-list-item-content>
-          </v-list-item>
-        </v-card>
+        <period ref="period" @dataChanged="loadData" />
+        <metrics :metrics="metric" />
       </v-col>
       <v-col cols="12" sm="12" xs="12" md="8" lg="8" xl="8">
         <v-card outlined>
           <v-list-item>
             <v-list-item-content>
               <bar-chart
+                ref="chart"
+                :key="keyChart"
                 :data="barChartData"
                 :options="barChartOptions"
                 :height="200"
@@ -71,78 +24,115 @@
         </v-card>
       </v-col>
     </v-row>
+    <v-dialog v-model="dialog" hide-overlay persistent width="300">
+      <v-card color="primary" dark>
+        <v-card-text>
+          Loading Data...
+          <v-progress-linear
+            indeterminate
+            color="white"
+            class="mb-0"
+          ></v-progress-linear>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
   </v-container>
 </template>
 
 <script>
+import Metrics from "@/components/Metrics.vue";
+import Period from "@/components/Period.vue";
+import { create, all } from "mathjs";
 export default {
+  components: {
+    Metrics,
+    Period,
+  },
   async mounted() {
-    const teste = await this.$axios.get(
-      "https://viacep.com.br/ws/01001000/json/"
-    );
-    console.log(teste.data);
-  },
-  computed: {
-    computedDateFormatted() {
-      return this.formatDate(this.date);
-    },
-  },
-  watch: {
-    date(val) {
-      this.dateFormatted = this.formatDate(this.date);
-    },
+    await this.loadData();
   },
   methods: {
-    formatDate(date) {
-      if (!date) return null;
-
-      const [year, month, day] = date.split("-");
-      return `${month}/${day}/${year}`;
+    getDates(startDate, stopDate) {
+      let dateArray = new Array();
+      let currentDate = startDate;
+      while (currentDate <= stopDate) {
+        dateArray.push(new Date(currentDate).toISOString());
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+      return dateArray;
     },
-    parseDate(date) {
-      if (!date) return null;
-
-      const [month, day, year] = date.split("/");
-      return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+    async loadData() {
+      this.dialog = true;
+      const math = create(all);
+      const date = new Date(this.$refs.period.date);
+      const stopDate = new Date(this.$refs.period.date);
+      const dateString = date.toISOString();
+      const period = Number(this.$refs.period.format);
+      const dateRange = this.getDates(
+        date,
+        stopDate.setDate(stopDate.getDate() + period - 1)
+      );
+      var labels = [];
+      var dayValue = [];
+      var max = [];
+      var average = [];
+      for (let el of dateRange) {
+        const response = await this.$axios.get(
+          `https://api.carbonintensity.org.uk/intensity/${el}/fw24h`
+        );
+        labels.push(el.substr(0, 10));
+        dayValue.push(response.data.data[0].intensity.actual || 0);
+        max.push(
+          Math.max.apply(
+            Math,
+            response.data.data.map(function (o) {
+              return o.intensity.actual;
+            })
+          )
+        );
+        const sum = response.data.data.reduce(
+          (total, next) => total + next.intensity.actual,
+          0
+        );
+        average.push(Number(sum / response.data.data.length).toFixed(2));
+      }
+      this.barChartData.labels = labels;
+      this.barChartData.datasets[0].data = dayValue;
+      this.barChartData.datasets[1].data = max;
+      this.barChartData.datasets[2].data = average;
+      this.keyChart += 1;
+      this.metric.average = math.mean(dayValue).toFixed(2);
+      this.metric.deviation = math.std(dayValue).toFixed(2);
+      this.metric.median = math.median(dayValue).toFixed(2);
+      this.dialog = false;
     },
   },
   data() {
     return {
-      items: ["Foo", "Bar", "Fizz", "Buzz"],
-      date: new Date().toISOString().substr(0, 10),
-      dateFormatted: this.formatDate(new Date().toISOString().substr(0, 10)),
-      menu: false,
-      picker: new Date().toISOString().substr(0, 10),
+      dialog: false,
+      metric: {
+        average: 0,
+        deviation: 0,
+        median: 0,
+      },
+      keyChart: 0,
       barChartData: {
-        labels: [
-          "2019-06",
-          "2019-07",
-          "2019-08",
-          "2019-09",
-          "2019-10",
-          "2019-11",
-          "2019-12",
-          "2020-01",
-          "2020-02",
-          "2020-03",
-          "2020-04",
-          "2020-05",
-        ],
+        labels: [],
         datasets: [
           {
-            label: "Visits",
-            data: [10, 15, 20, 30, 40, 50, 60, 70, 34, 45, 11, 78, 45],
-            backgroundColor: "#003f5c",
+            label: "CO2 (12:00 PM)",
+            data: [],
+            backgroundColor: "#00994c",
           },
           {
-            label: "Pages Views",
-            data: [30, 24, 57, 23, 68, 72, 25, 64, 133, 143, 165, 33, 56],
-            backgroundColor: "#2f4b7c",
+            label: "Max Day Value",
+            data: [],
+            backgroundColor: "#CC0000",
           },
           {
-            label: "Users",
-            data: [45, 65, 30, 53, 34, 35, 26, 37, 34, 45, 67, 87, 98],
-            backgroundColor: "#665191",
+            label: "Average of Day",
+            data: [],
+            backgroundColor: "#000099",
           },
         ],
       },

@@ -6,7 +6,6 @@
       </v-container>
     </v-main>
     <v-footer
-      app
     >
       <span>&copy; {{ new Date().getFullYear() }} Wesley Azevedo</span>
     </v-footer>
