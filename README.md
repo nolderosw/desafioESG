@@ -1,5 +1,8 @@
 # desafioESG
 
+## Overview
+Olá, fico muito feliz em participar! O projeto foi desenvolvido com Vue.js, utilizando um framework chamado Nuxt.js (que utiliza SSR) e para estilos o Vuetify. Para confecção do grafico utilizei a lib chartjs, e para alguns calculos matematicos o auxilio da mathjs. Para rodar o projeto precisa ter o nodejs 10+ instalado na maquina e seguir build setup abaixo. Não consegui ter tempo para realizar a parte do real time ... :( notei tb que não existem dados para datas futuras (logicamente) então apenas existe essa restrição na aplicação! Até mais. :)
+
 ## Build Setup
 
 ```bash
@@ -17,4 +20,4 @@ $ npm run start
 $ npm run generate
 ```
 
-For detailed explanation on how things work, check out [Nuxt.js docs](https://nuxtjs.org).
+
